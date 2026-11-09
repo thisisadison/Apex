@@ -1,6 +1,6 @@
 """
-F1 Top-5 Finish Prediction Pipeline
-====================================
+F1 Points-Finish (Top-10) Prediction Pipeline
+==============================================
 
 Rebuilds SC1015_Final_Formula_1_Mini-Project.ipynb as a clean,
 reproducible pipeline: load -> build features -> clean -> train &
@@ -48,11 +48,17 @@ from sklearn.utils import resample
 
 SINGAPORE_CIRCUIT_ID = 15  # circuitId for the Singapore GP in this dataset
 
+# Points have been paid down to P10 since the 2010 season (25-18-15-...-1),
+# not just the podium or a top-5 cutoff -- this is what "finishes in the
+# points" actually means and what the target below is defined against.
+POINTS_POSITIONS = 10
+
 # Pre-qualifying features only. avg_pit_stop_s/avg_lap_time_ms/fastest_lap_time_ms
 # are dropped because they're only known *during* the race (see
 # build_season_form()'s docstring). grid_position is ALSO dropped, despite
-# being a genuinely strong feature (correlation -0.57 with top5, second only
-# to driver_standing_before) -- it doesn't exist until qualifying finishes,
+# being a genuinely strong feature (correlated with finishing position,
+# second only to driver_standing_before) -- it doesn't exist until qualifying
+# finishes,
 # usually about a day before the race, so a model that needs it can only
 # ever be used the day before a race, not while there's still real lead
 # time. Dropping it costs real accuracy (~87% -> ~83% in testing) in
@@ -69,7 +75,7 @@ CATEGORICAL_FEATURE_COLUMNS = ["circuit_id"]
 FEATURE_COLUMNS = NUMERIC_FEATURE_COLUMNS + CATEGORICAL_FEATURE_COLUMNS
 REQUIRED_COLUMNS = ["driver_standing_before", "constructor_standing_before",
                      "years_experience", "is_rookie", "circuit_id"]
-TARGET_COLUMN = "top5"
+TARGET_COLUMN = "points_finish"
 
 
 # ---------------------------------------------------------------------
@@ -129,7 +135,7 @@ def build_singapore_dataset(raw: dict) -> pd.DataFrame:
     results = raw["results"][raw["results"]["raceId"].isin(sgp_ids)].copy()
     results["fastest_lap_time_ms"] = results["fastestLapTime"].apply(_parse_lap_time_to_ms)
     results["position"] = pd.to_numeric(results["position"], errors="coerce")  # '\N' (DNF) -> NaN
-    results[TARGET_COLUMN] = results["position"].between(1, 5).astype(int)  # DNF/NaN -> 0, same as the notebook
+    results[TARGET_COLUMN] = results["position"].between(1, POINTS_POSITIONS).astype(int)  # DNF/NaN -> 0
 
     df = lap_avg.merge(grid, on=["raceId", "driverId"], how="outer")
     df = df.merge(
@@ -290,15 +296,9 @@ def load_multi_circuit_fresh_data(path: str) -> pd.DataFrame:
     return df
 
 
-def build_multi_circuit_dataset(raw: dict, fresh_path: str = None) -> pd.DataFrame:
-    """Same features as build_singapore_dataset(), but one row per driver
-    per race across EVERY circuit (restricted to MULTI_CIRCUIT_MIN_YEAR
-    onward -- same era Singapore itself has been racing in) plus any
-    freshly-fetched 2023+ seasons, instead of just historical Singapore.
-    None of FEATURE_COLUMNS describe anything Singapore-specific
-    (grid_position/in-race stats were already dropped), so this is meant
-    to be trained on and then evaluated specifically against held-out
-    Singapore races -- see train_and_select()'s test_circuit_id.
+def build_combined_raw(raw: dict, fresh_path: str = None) -> dict:
+    """Historical CSV rows and freshly-fetched 2023+ rows as ONE continuous
+    results/races timeline, with driverIds reconciled between the two.
 
     Fresh rows are folded in at the RAW results/races level, before any
     feature is computed -- not merged in afterward like
@@ -321,22 +321,35 @@ def build_multi_circuit_dataset(raw: dict, fresh_path: str = None) -> pd.DataFra
     hist_races = raw["races"][["raceId", "year", "round", "circuitId"]]
 
     fresh = load_multi_circuit_fresh_data(fresh_path or "data/multi_circuit_fresh.csv")
-    if not fresh.empty:
-        combined_results = pd.concat([
+    if fresh.empty:
+        return {"results": hist_results, "races": hist_races}
+    return {
+        "results": pd.concat([
             hist_results[["raceId", "driverId", "constructorId", "position", "points"]],
             fresh[["raceId", "driverId", "constructorId", "position", "points"]],
-        ], ignore_index=True)
-        combined_races = pd.concat([
+        ], ignore_index=True),
+        "races": pd.concat([
             hist_races,
             fresh[["raceId", "year", "round", "circuitId"]].drop_duplicates("raceId"),
-        ], ignore_index=True)
-    else:
-        combined_results, combined_races = hist_results, hist_races
-    combined_raw = {"results": combined_results, "races": combined_races}
+        ], ignore_index=True),
+    }
+
+
+def build_multi_circuit_dataset(raw: dict, fresh_path: str = None) -> pd.DataFrame:
+    """Same features as build_singapore_dataset(), but one row per driver
+    per race across EVERY circuit (restricted to MULTI_CIRCUIT_MIN_YEAR
+    onward -- same era Singapore itself has been racing in) plus any
+    freshly-fetched 2023+ seasons, instead of just historical Singapore.
+    None of FEATURE_COLUMNS describe anything Singapore-specific
+    (grid_position/in-race stats were already dropped), so this is meant
+    to be trained on and then evaluated specifically against held-out
+    Singapore races -- see train_and_select()'s test_circuit_id."""
+    combined_raw = build_combined_raw(raw, fresh_path)
+    combined_results, combined_races = combined_raw["results"], combined_raw["races"]
 
     results = combined_results.copy()
     results["position"] = pd.to_numeric(results["position"], errors="coerce")
-    results[TARGET_COLUMN] = results["position"].between(1, 5).astype(int)
+    results[TARGET_COLUMN] = results["position"].between(1, POINTS_POSITIONS).astype(int)
 
     df = results[["raceId", "driverId", TARGET_COLUMN]].copy()
     df = df.merge(combined_races[["raceId", "year", "circuitId"]], on="raceId", how="left")
@@ -609,7 +622,7 @@ def train_and_select(df: pd.DataFrame, test_circuit_id=None):
 
 
 # ---------------------------------------------------------------------
-# 7. Export for f1_agent.py's predict_top5() tool to load
+# 7. Export for f1_agent.py's predict_points_finish() tool to load
 # ---------------------------------------------------------------------
 def export_model(pipeline: Pipeline, path: str):
     joblib.dump(pipeline, path)
