@@ -15,7 +15,7 @@ import time
 import pandas as pd
 import requests
 
-from fetch_all_circuits_data import fetch_season_results
+from f1.fetch_all_circuits_data import fetch_season_results
 
 CACHE_TTL_SECONDS = 60 * 60 * 6
 API = "https://api.jolpi.ca/ergast/f1"

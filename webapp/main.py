@@ -17,8 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-import analytics
-import pipeline
+from f1 import analytics, pipeline
 from webapp.agent import RaceAnalyst
 from webapp.live_data import LiveData
 from webapp.model_store import ModelStore

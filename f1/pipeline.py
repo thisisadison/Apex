@@ -31,6 +31,7 @@ here. Easy to add back in if you want to test whether it helps.)
 """
 
 import argparse
+import os
 
 import joblib
 import numpy as np
@@ -625,14 +626,14 @@ def train_and_select(df: pd.DataFrame, test_circuit_id=None):
 # 7. Export for f1_agent.py's predict_points_finish() tool to load
 # ---------------------------------------------------------------------
 def export_model(pipeline: Pipeline, path: str):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     joblib.dump(pipeline, path)
-    print(f"Saved to {path}")
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", default="data", help="Folder containing the 7 raw CSVs")
-    parser.add_argument("--model-out", default="model.pkl")
+    parser.add_argument("--model-out", default="models/model.pkl")
     args = parser.parse_args()
 
     raw = load_raw_tables(args.data_dir)

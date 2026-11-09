@@ -20,8 +20,8 @@ import functools
 
 import pandas as pd
 
-import pipeline
-from pipeline import FEATURE_COLUMNS
+from f1 import pipeline
+from f1.pipeline import FEATURE_COLUMNS
 
 # Placeholder finishing position, matching how a DNF/unknown result is
 # spelled in the source CSVs -- pd.to_numeric(errors="coerce") turns it

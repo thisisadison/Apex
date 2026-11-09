@@ -13,10 +13,9 @@ import os
 import joblib
 import pandas as pd
 
-from pipeline import FEATURE_COLUMNS
+from f1.pipeline import FEATURE_COLUMNS 
 
-DEFAULT_MODEL_PATH = os.environ.get("F1_MODEL_PATH", "model.pkl")
-
+DEFAULT_MODEL_PATH = os.environ.get("F1_MODEL_PATH", "models/model.pkl")
 
 class ModelStore:
     def __init__(self, path: str = DEFAULT_MODEL_PATH):

@@ -174,7 +174,7 @@ class AutoUpdateScheduler:
         fingerprint_at_start = self._data_fingerprint()
         tmp_path = f"{self.model_store.path}.new"
         command = [
-            sys.executable, "pipeline.py",
+            sys.executable, "-m", "f1.pipeline",
             "--data-dir", self.data_dir,
             "--model-out", tmp_path,
         ]

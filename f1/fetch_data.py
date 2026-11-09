@@ -25,7 +25,7 @@ import time
 import pandas as pd
 import requests
 
-from pipeline import POINTS_POSITIONS, TARGET_COLUMN, _parse_lap_time_to_ms
+from f1.pipeline import POINTS_POSITIONS, TARGET_COLUMN, _parse_lap_time_to_ms
 
 API = "https://api.jolpi.ca/ergast/f1"
 CIRCUIT_ID = "marina_bay"  # Jolpica-F1's slug for the Singapore GP circuit

@@ -17,10 +17,10 @@ not a 2008 field that shares no drivers, cars, or regulations with it.
     report = compute(frame, year)
 """
 
+from f1 import pipeline
+
 import numpy as np
 import pandas as pd
-
-import pipeline
 
 # The seven model inputs, in the order they're shown everywhere downstream.
 # circuit_id is excluded on purpose: it's the one categorical feature, so it

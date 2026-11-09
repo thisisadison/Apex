@@ -31,7 +31,7 @@ import joblib
 import pandas as pd
 from anthropic import Anthropic
 
-from pipeline import FEATURE_COLUMNS, build_singapore_dataset, load_raw_tables
+from f1.pipeline import FEATURE_COLUMNS
 
 client = Anthropic()  # reads ANTHROPIC_API_KEY from your environment
 
@@ -44,7 +44,7 @@ DATA_DIR = "data"
 
 _raw = load_raw_tables(DATA_DIR)
 SGP_DF = build_singapore_dataset(_raw)
-MODEL = joblib.load("model.pkl")  # produced by `python pipeline.py`
+MODEL = joblib.load("models/model.pkl")  # produced by `python pipeline.py`
 
 
 def _lookup(driver: str, year: int):
