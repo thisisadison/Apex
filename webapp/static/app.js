@@ -74,95 +74,53 @@ const api = async (path, options) => {
 };
 
 /* ---------------------------------------------------------------- track art
- * Every circuit gets a distinct, stable piece of generated line art: a closed
- * spline whose shape is seeded from the circuit id. It is deliberately not a
- * survey-accurate track map -- it is a consistent visual identity that needs
- * no image licence and renders identically offline.
+ * Real circuit outlines, GPS-traced and baked into /tracks.json by
+ * webapp/build_tracks.py, drawn north-up. A circuit with no outline (an
+ * older numeric-id race) gets no line at all rather than a made-up one.
  */
 
-function seedFrom(text) {
-  let hash = 2166136261;
-  for (let i = 0; i < text.length; i += 1) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
+let tracksReady = null;
+function loadTracks() {
+  if (!tracksReady) {
+    tracksReady = api("/tracks.json").then((data) => data.tracks).catch(() => ({}));
   }
-  return hash >>> 0;
+  return tracksReady;
 }
 
-function mulberry32(seed) {
-  return function random() {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function trackPath(circuitId) {
-  const random = mulberry32(seedFrom(circuitId));
-  const count = 9 + Math.floor(random() * 4);
-  const points = [];
-  for (let i = 0; i < count; i += 1) {
-    const angle = (i / count) * Math.PI * 2;
-    const radius = 0.52 + random() * 0.46;
-    points.push([
-      50 + Math.cos(angle) * radius * 40,
-      50 + Math.sin(angle) * radius * 30,
-    ]);
-  }
-  // Catmull-Rom through the points, closed, converted to cubic beziers.
-  let path = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
-  for (let i = 0; i < count; i += 1) {
-    const p0 = points[(i - 1 + count) % count];
-    const p1 = points[i];
-    const p2 = points[(i + 1) % count];
-    const p3 = points[(i + 2) % count];
-    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
-    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
-    path += ` C ${c1[0].toFixed(2)} ${c1[1].toFixed(2)}, ${c2[0].toFixed(2)} ${c2[1].toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
-  }
-  return `${path} Z`;
-}
-
-function renderHeroArt(circuitId) {
-  const art = $("#hero-art");
+async function renderHeroArt(circuitId) {
+  const art = $("#hero-track");
+  art.dataset.circuit = circuitId;
+  const track = (await loadTracks())[circuitId];
+  // A slower earlier call must not paint over a newer circuit.
+  if (art.dataset.circuit !== circuitId) return;
   art.innerHTML = "";
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 100 100");
-  // "meet" keeps the whole loop visible; the CSS anchors it as a motif on
-  // the right rather than letting a wide viewport crop it away.
-  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  if (!track) return;
 
-  const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-  defs.innerHTML =
-    '<linearGradient id="trackGrad" x1="0" y1="0" x2="1" y2="1">' +
-    '<stop offset="0%" stop-color="#ff2d55" stop-opacity="0.85"/>' +
-    '<stop offset="100%" stop-color="#5e5ce6" stop-opacity="0.35"/>' +
-    "</linearGradient>";
+  const frame = el("div", "hero__track");
+  const svg = svgEl("svg", { viewBox: track.viewBox, preserveAspectRatio: "xMidYMid meet" });
+  const defs = svgEl("defs", {});
+  const gradient = svgEl("linearGradient", {
+    id: "trackGrad", x1: "0", y1: "0", x2: "1", y2: "1",
+  });
+  gradient.appendChild(svgEl("stop", { offset: "0%", "stop-color": "#ff2d55" }));
+  gradient.appendChild(svgEl("stop", { offset: "100%", "stop-color": "#5e5ce6" }));
+  defs.appendChild(gradient);
   svg.appendChild(defs);
 
-  const d = trackPath(circuitId);
-  const glow = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  glow.setAttribute("d", d);
-  glow.setAttribute("fill", "none");
-  glow.setAttribute("stroke", "url(#trackGrad)");
-  glow.setAttribute("stroke-width", "5");
-  glow.setAttribute("stroke-linejoin", "round");
-  glow.setAttribute("opacity", "0.16");
-  glow.style.filter = "blur(3px)";  // CSS filter, not an SVG <filter> reference
-  svg.appendChild(glow);
+  ["hero__track-glow", "hero__track-line"].forEach((className) => {
+    svg.appendChild(svgEl("path", {
+      d: track.d,
+      class: className,
+      pathLength: "1",
+      fill: "none",
+      stroke: "url(#trackGrad)",
+      "stroke-linejoin": "round",
+      "stroke-linecap": "round",
+    }));
+  });
 
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  line.setAttribute("d", d);
-  line.setAttribute("fill", "none");
-  line.setAttribute("stroke", "url(#trackGrad)");
-  line.setAttribute("stroke-width", "0.7");
-  line.setAttribute("stroke-linejoin", "round");
-  line.setAttribute("opacity", "0.9");
-  svg.appendChild(line);
-
-  art.appendChild(svg);
+  frame.appendChild(svg);
+  art.appendChild(frame);
 }
 
 /* -------------------------------------------------------------------- tabs */
@@ -443,6 +401,8 @@ async function loadPredictions() {
     }
   } catch (error) {
     $("#driver-list").innerHTML = "";
+    $("#rail-left").innerHTML = "";
+    $("#rail-right").innerHTML = "";
     const notice = $("#predictions-notice");
     notice.className = "notice notice--bad";
     notice.textContent = `Could not load predictions: ${error.message}`;
@@ -495,6 +455,8 @@ async function loadPredictions() {
     scoreline.classList.remove("is-hidden");
   }
 
+  renderRails(payload.drivers, isReplay);
+
   // state.races is newest-first, so [0] is the most recent completed race
   // and its year is the season currently being run.
   const mostRecent = state.races.length ? state.races[0] : null;
@@ -512,11 +474,15 @@ async function loadPredictions() {
 
   const list = $("#driver-list");
   list.innerHTML = "";
+  // Round up to whole rows when the list is laid out side by side, so an
+  // opened card never sits beside a closed one in the same row.
+  const columns = getComputedStyle(list).gridTemplateColumns.split(" ").filter(Boolean).length || 1;
+  const openCount = Math.ceil(OPEN_BY_DEFAULT / columns) * columns;
   payload.drivers.forEach((row, index) =>
     list.appendChild(driverCard(row, index, isReplay, {
       showHeadshot,
       showRacePhoto,
-      open: isMostRecentReplay && index < OPEN_BY_DEFAULT,
+      open: isMostRecentReplay && index < openCount,
     }))
   );
 
@@ -525,6 +491,202 @@ async function loadPredictions() {
     : `Prediction only — this race hasn't been run, so there are no actual results to compare against. Standings and form are as of ${payload.form_as_of.label || "the latest race in the data"}, which is the most recent information the model has; nothing between then and this race is knowable yet. Uses pre-qualifying information only — no grid position, no lap or pit-stop times. Tap a driver to see the inputs behind their number.`;
 
   renderSeasonStrip();
+}
+
+/* ------------------------------------------------------------------- rails
+ * Summary cards either side of the driver list on wide screens. Everything
+ * is derived from the rows already on screen -- no extra request. The form
+ * features are average finishing positions, so lower is better.
+ */
+
+const chance = (probability) => pct(probability, 0);
+const codes = (rows) => rows.map((row) => row.driver.code).join(" ");
+
+function railCard({ label, value, foot, color }) {
+  const card = el("div", "railcard");
+  card.appendChild(el("div", "railcard__label", label));
+  const valueNode = el("div", "railcard__value", value);
+  if (color) {
+    valueNode.classList.add("railcard__value--team");
+    valueNode.style.setProperty("--team", color);
+  }
+  card.appendChild(valueNode);
+  if (foot) card.appendChild(el("div", "railcard__foot", foot));
+  return card;
+}
+
+function fillRail(target, title, cards) {
+  target.innerHTML = "";
+  target.appendChild(el("div", "rail__title", title));
+  cards.forEach((card) => target.appendChild(railCard(card)));
+}
+
+function bestBy(rows, key) {
+  return rows
+    .filter((row) => row.features[key] !== null && row.features[key] !== undefined)
+    .sort((a, b) => a.features[key] - b.features[key])[0] || null;
+}
+
+function modelViewCards(ranked) {
+  const cards = [];
+  const favourite = ranked[0];
+  cards.push({
+    label: "Favourite to score",
+    value: favourite.driver.name,
+    foot: `${chance(favourite.points_probability)} · ${favourite.team.name}`,
+    color: favourite.team.color,
+  });
+
+  if (ranked.length > 10) {
+    const last = ranked[9];
+    const first = ranked[10];
+    cards.push({
+      label: "Points cut-line",
+      value: last.driver.name,
+      foot: `Last in at ${chance(last.points_probability)}, ${first.driver.name} first out at ${chance(first.points_probability)}`,
+      color: last.team.color,
+    });
+  }
+
+  const locks = ranked.filter((row) => row.points_probability >= 0.8).length;
+  const longShots = ranked.filter((row) => row.points_probability < 0.2).length;
+  cards.push({
+    label: "Near-certain (80%+)",
+    value: `${locks} driver${locks === 1 ? "" : "s"}`,
+    foot: `${longShots} given under 20%`,
+  });
+
+  const teams = new Map();
+  ranked.forEach((row) => {
+    const entry = teams.get(row.team.id) || { team: row.team, expected: 0 };
+    entry.expected += row.points_probability;
+    teams.set(row.team.id, entry);
+  });
+  const topTeam = [...teams.values()].sort((a, b) => b.expected - a.expected)[0];
+  cards.push({
+    label: "Strongest team",
+    value: topTeam.team.name,
+    foot: `${topTeam.expected.toFixed(1)} expected scorers`,
+    color: topTeam.team.color,
+  });
+
+  const expected = ranked.reduce((sum, row) => sum + row.points_probability, 0);
+  cards.push({
+    label: "Expected scorers",
+    value: expected.toFixed(1),
+    foot: "Every probability added up. A real race always pays exactly 10.",
+  });
+  return cards;
+}
+
+function resultCards(ranked) {
+  // A retirement has actual_position AND actual_points null, so it counts
+  // as "didn't score" for a pick but never as a scorer.
+  const scored = ranked.filter((row) => row.actual_points);
+  const surprises = scored.filter((row) => !row.predicted_points);
+  const missed = ranked.filter((row) => row.predicted_points && !row.actual_points);
+  const unclassified = ranked.filter((row) => row.actual_position === null);
+  const cards = [];
+
+  const winner = ranked.find((row) => row.actual_position === 1);
+  if (winner) {
+    cards.push({
+      label: "Winner",
+      value: winner.driver.name,
+      foot: `Model had ${chance(winner.points_probability)} to score, ranked #${ranked.indexOf(winner) + 1}`,
+      color: winner.team.color,
+    });
+  }
+  cards.push({
+    label: "Scored, not picked",
+    value: String(surprises.length),
+    foot: surprises.length ? codes(surprises) : "Every scorer was in the model's ten",
+  });
+  cards.push({
+    label: "Picked, didn't score",
+    value: String(missed.length),
+    foot: missed.length ? codes(missed) : "Every pick scored",
+  });
+  const upset = [...scored].sort((a, b) => a.points_probability - b.points_probability)[0];
+  if (upset) {
+    cards.push({
+      label: "Biggest upset",
+      value: upset.driver.name,
+      foot: `Scored P${upset.actual_position} from ${chance(upset.points_probability)}`,
+      color: upset.team.color,
+    });
+  }
+  cards.push({
+    label: "Not classified",
+    value: String(unclassified.length),
+    foot: unclassified.length ? codes(unclassified) : "Everyone was classified",
+  });
+  return cards;
+}
+
+function formCards(ranked) {
+  const cards = [];
+  const hottest = bestBy(ranked, "driver_recent_form");
+  if (hottest) {
+    cards.push({
+      label: "Best recent form",
+      value: hottest.driver.name,
+      foot: `Avg finish ${hottest.features.driver_recent_form.toFixed(1)} over the last 3 races`,
+      color: hottest.team.color,
+    });
+  }
+  const specialist = bestBy(ranked, "driver_circuit_avg_finish");
+  cards.push(specialist ? {
+    label: "Best record here",
+    value: specialist.driver.name,
+    foot: `Avg finish ${specialist.features.driver_circuit_avg_finish.toFixed(1)} at this circuit`,
+    color: specialist.team.color,
+  } : {
+    label: "Best record here",
+    value: "No history",
+    foot: "Nobody on this grid has finished here yet",
+  });
+  const teamForm = bestBy(ranked, "constructor_recent_form");
+  if (teamForm) {
+    cards.push({
+      label: "Team in form",
+      value: teamForm.team.name,
+      foot: `Avg finish ${teamForm.features.constructor_recent_form.toFixed(1)} over the last 3 races`,
+      color: teamForm.team.color,
+    });
+  }
+  const leader = ranked.find((row) => row.features.driver_standing_before === 1);
+  if (leader) {
+    cards.push({
+      label: "Championship leader",
+      value: leader.driver.name,
+      foot: `Model gives ${chance(leader.points_probability)} to score`,
+      color: leader.team.color,
+    });
+  }
+  const rookies = ranked.filter((row) => row.features.is_rookie >= 0.5);
+  cards.push({
+    label: "Rookies",
+    value: String(rookies.length),
+    foot: rookies.length
+      ? `${rookies[0].driver.name} leads them at ${chance(rookies[0].points_probability)}`
+      : "No rookies on this grid",
+  });
+  return cards;
+}
+
+function renderRails(drivers, isReplay) {
+  const left = $("#rail-left");
+  const right = $("#rail-right");
+  if (!drivers.length) {
+    left.innerHTML = "";
+    right.innerHTML = "";
+    return;
+  }
+  const ranked = [...drivers].sort((a, b) => b.points_probability - a.points_probability);
+  fillRail(left, "Model's view", modelViewCards(ranked));
+  if (isReplay) fillRail(right, "What happened", resultCards(ranked));
+  else fillRail(right, "Form guide", formCards(ranked));
 }
 
 /* ------------------------------------------------------------------ season */
@@ -625,9 +787,7 @@ function renderSeasonStrip() {
     item.addEventListener("click", () => {
       if (round.completed && round.race_id) {
         setMode("replay");
-        state.raceId = round.race_id;
-        const select = $("#race-select");
-        if (select) select.value = round.race_id;
+        setRaceSelection(round.race_id);
       } else {
         setMode("upcoming");
         state.circuit = round.circuit.id;
@@ -674,23 +834,193 @@ async function loadPickers() {
   // The API returns newest-first; the dropdown reads chronologically so it
   // matches the season strip's left-to-right running order. Most recent is
   // still what's selected by default -- it's just last in the list now.
-  const select = $("#race-select");
-  select.innerHTML = "";
   const chronological = [...races].sort(
     (a, b) => a.year - b.year || a.round - b.round
   );
-  chronological.forEach((race) => {
-    const option = el("option", null, `${race.label} · R${race.round}`);
-    option.value = race.race_id;
-    select.appendChild(option);
-  });
-  state.raceId = chronological.length ? chronological[chronological.length - 1].race_id : null;
-  if (state.raceId) select.value = state.raceId;
-  select.addEventListener("change", () => {
-    state.raceId = select.value;
-    loadPredictions();
+  buildRaceOptions(chronological);
+  if (chronological.length) setRaceSelection(chronological[chronological.length - 1].race_id);
+}
+
+/* ----------------------------------------------------------- race dropdown
+ * A custom listbox rather than a native <select>: a select's open menu is
+ * drawn by the OS and ignores the page's styles. Keyboard behaviour follows
+ * the ARIA select-only combobox pattern -- focus stays on the trigger and
+ * aria-activedescendant names the highlighted option.
+ */
+
+const raceDropdown = { options: [], active: -1 };
+
+function flagImg(country, className) {
+  const img = el("img", className);
+  img.src = `https://flagcdn.com/w40/${country}.png`;
+  img.alt = "";
+  img.addEventListener("error", () => img.remove());
+  return img;
+}
+
+function buildRaceOptions(races) {
+  const panel = $("#race-listbox");
+  panel.innerHTML = "";
+  raceDropdown.options = [];
+  let year = null;
+  races.forEach((race) => {
+    if (race.year !== year) {
+      year = race.year;
+      const group = el("div", "dropdown__group", String(year));
+      group.setAttribute("role", "presentation");
+      panel.appendChild(group);
+    }
+    const option = el("div", "dropdown__option");
+    option.id = `race-option-${race.race_id}`;
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", "false");
+    option.appendChild(el("span", "dropdown__round", `R${race.round}`));
+    if (race.circuit.country) option.appendChild(flagImg(race.circuit.country, "dropdown__flag"));
+    const text = el("span", "dropdown__text");
+    text.appendChild(el("span", "dropdown__name", race.circuit.name));
+    if (race.circuit.locality) text.appendChild(el("span", "dropdown__sub", race.circuit.locality));
+    option.appendChild(text);
+
+    const index = raceDropdown.options.length;
+    // mousedown, not click: keeps focus on the trigger so the panel's
+    // outside-click handler never sees this as leaving the control.
+    option.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      chooseRace(race.race_id);
+    });
+    option.addEventListener("mousemove", () => highlightOption(index, false));
+    panel.appendChild(option);
+    raceDropdown.options.push({ race, node: option });
   });
 }
+
+function setRaceSelection(raceId) {
+  state.raceId = raceId;
+  const selected = raceDropdown.options.find((entry) => entry.race.race_id === raceId);
+  raceDropdown.options.forEach((entry) =>
+    entry.node.setAttribute("aria-selected", String(entry === selected))
+  );
+  const value = $("#race-value");
+  value.innerHTML = "";
+  if (!selected) {
+    value.textContent = "Choose a race";
+    return;
+  }
+  const { race } = selected;
+  if (race.circuit.country) value.appendChild(flagImg(race.circuit.country, "dropdown__flag"));
+  value.appendChild(el("span", "dropdown__value-text", `${race.label} · R${race.round}`));
+}
+
+function isRaceDropdownOpen() {
+  return !$("#race-listbox").hidden;
+}
+
+function highlightOption(index, scroll) {
+  const { options } = raceDropdown;
+  if (!options.length) return;
+  const clamped = Math.max(0, Math.min(options.length - 1, index));
+  if (raceDropdown.active >= 0 && options[raceDropdown.active]) {
+    options[raceDropdown.active].node.classList.remove("is-active");
+  }
+  raceDropdown.active = clamped;
+  const node = options[clamped].node;
+  node.classList.add("is-active");
+  $("#race-trigger").setAttribute("aria-activedescendant", node.id);
+  if (scroll) node.scrollIntoView({ block: "nearest" });
+}
+
+const PANEL_MAX = 380;
+const PANEL_MIN = 260;
+
+// Room below the trigger, minus the fixed mobile tab bar where it shows.
+// Too little and the page scrolls the trigger up under the nav first, so
+// the list never opens off-screen or behind the tab bar.
+function fitRacePanel(panel) {
+  const trigger = $("#race-trigger");
+  const tabbar = $(".tabbar");
+  const bottomInset = tabbar && getComputedStyle(tabbar).display !== "none" ? tabbar.offsetHeight : 0;
+  const navHeight = $(".nav").offsetHeight;
+  const rect = trigger.getBoundingClientRect();
+  let bottom = rect.bottom;
+  const room = () => window.innerHeight - bottomInset - bottom - 16;
+  if (room() < PANEL_MIN) {
+    const shift = rect.top - navHeight - 12;
+    window.scrollBy({ top: shift, behavior: "smooth" });
+    bottom -= shift;
+  }
+  panel.style.maxHeight = `${Math.max(160, Math.min(PANEL_MAX, room()))}px`;
+}
+
+function openRaceDropdown() {
+  const panel = $("#race-listbox");
+  panel.hidden = false;
+  fitRacePanel(panel);
+  $("#race-trigger").setAttribute("aria-expanded", "true");
+  $("#race-dropdown").classList.add("is-open");
+  const selected = raceDropdown.options.findIndex((entry) => entry.race.race_id === state.raceId);
+  highlightOption(selected >= 0 ? selected : raceDropdown.options.length - 1, false);
+  const active = raceDropdown.options[raceDropdown.active];
+  if (active) {
+    panel.scrollTop = active.node.offsetTop - panel.clientHeight / 2 + active.node.offsetHeight / 2;
+  }
+}
+
+function closeRaceDropdown() {
+  $("#race-listbox").hidden = true;
+  const trigger = $("#race-trigger");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.removeAttribute("aria-activedescendant");
+  $("#race-dropdown").classList.remove("is-open");
+}
+
+function chooseRace(raceId) {
+  closeRaceDropdown();
+  $("#race-trigger").focus();
+  if (raceId === state.raceId) return;
+  setRaceSelection(raceId);
+  loadPredictions();
+}
+
+$("#race-trigger").addEventListener("click", () => {
+  if (isRaceDropdownOpen()) closeRaceDropdown();
+  else openRaceDropdown();
+});
+
+$("#race-trigger").addEventListener("keydown", (event) => {
+  const open = isRaceDropdownOpen();
+  const { active, options } = raceDropdown;
+  const moves = {
+    ArrowDown: active + 1,
+    ArrowUp: active - 1,
+    PageDown: active + 10,
+    PageUp: active - 10,
+    Home: 0,
+    End: options.length - 1,
+  };
+  if (!open) {
+    if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      openRaceDropdown();
+    }
+    return;
+  }
+  if (event.key in moves) {
+    event.preventDefault();
+    highlightOption(moves[event.key], true);
+  } else if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    if (options[active]) chooseRace(options[active].race.race_id);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    closeRaceDropdown();
+  } else if (event.key === "Tab") {
+    closeRaceDropdown();
+  }
+});
+
+document.addEventListener("mousedown", (event) => {
+  if (isRaceDropdownOpen() && !$("#race-dropdown").contains(event.target)) closeRaceDropdown();
+});
 
 function setMode(mode) {
   state.mode = mode;

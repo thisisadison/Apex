@@ -3,6 +3,8 @@
 
 A machine learning project that predicts whether a Formula 1 driver will finish in the points (top 10) at a given race, using only information available before qualifying. It started as an NTU SC1015 (Introduction to Data Science and AI) mini-project on the Singapore Grand Prix and has grown into a trained multi-circuit model, a FastAPI web app with a live dashboard, and a Claude-powered race analyst.
 
+![Apex dashboard](webapp/static/photos/site_preview/main-ss.png)
+
 ## Highlights
 
 - **Leakage-aware evaluation.** Models are tested on later seasons than they were trained on, and class balancing is applied to the training set only.

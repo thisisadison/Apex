@@ -26,6 +26,7 @@
   --radius-lg: 24px;
 
   --pad: clamp(16px, 4vw, 28px);
+  --content-max: 1080px;
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
 
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
@@ -56,11 +57,99 @@ a { color: inherit; text-decoration: none; }
 
 .wrap {
   width: 100%;
-  max-width: 1080px;
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: 0 var(--pad);
 }
 .wrap--narrow { max-width: 760px; }
+
+/* ------------------------------------------------------------------ rails */
+
+/* Wide screens only: summary cards either side of the predictions column.
+   Past 1280px the column grows with the window (up to 2200px) instead of
+   stopping at 1080px and leaving the rest empty; the driver list below
+   turns into a multi-column grid to use that width. --content-max is
+   shared with the nav and hero so their edges stay aligned with it. */
+.rail { display: none; }
+
+@media (min-width: 1280px) {
+  :root {
+    --rail: clamp(196px, calc((100vw - 1080px) / 2 - 36px), 300px);
+    --rail-gap: 18px;
+    --content-max: min(2200px, calc(100vw - 2 * (var(--rail) + var(--rail-gap)) - 48px));
+  }
+  .predlayout {
+    display: grid;
+    grid-template-columns: var(--rail) var(--content-max) var(--rail);
+    column-gap: var(--rail-gap);
+    justify-content: center;
+    align-items: start;
+  }
+  .predlayout > .wrap { margin: 0; }
+  .rail {
+    display: grid;
+    gap: 9px;
+    margin-top: clamp(20px, 4vw, 28px);
+  }
+  .rail:empty { display: none; }
+}
+/* Only pinned where a full rail fits on screen, or its bottom cards
+   could never be scrolled into view. */
+@media (min-width: 1280px) and (min-height: 700px) {
+  .rail { position: sticky; top: 74px; }
+}
+
+.rail__title {
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 2px;
+}
+
+.railcard {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px 13px;
+  animation: rise 0.4s var(--ease) both;
+  transition: border-color 0.25s var(--ease);
+}
+.railcard:hover { border-color: var(--line-strong); }
+
+.railcard__label { font-size: 11.5px; color: var(--text-dim); }
+
+.railcard__value {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.railcard__value--team {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.railcard__value--team::before {
+  content: "";
+  width: 3px;
+  height: 0.9em;
+  border-radius: 2px;
+  background: var(--team);
+  flex: none;
+  align-self: center;
+}
+
+.railcard__foot {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
 
 /* ------------------------------------------------------------------ nav */
 
@@ -75,7 +164,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .nav__inner {
-  max-width: 1080px;
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: 0 var(--pad);
   height: 56px;
@@ -214,18 +303,39 @@ a { color: inherit; text-decoration: none; }
   background: radial-gradient(120% 90% at 78% 12%, #2a2a33 0%, #0b0b0e 62%);
   transition: background 0.6s var(--ease);
 }
-/* Anchored right as a motif, sized off the hero's height, so the loop
-   stays whole at every viewport instead of being cropped by wide ones. */
-.hero__art svg {
+/* Above the scrim, not inside .hero__art beneath it: the scrim darkens the
+   lower half of the hero for the title, and blacked out half the circuit. */
+.hero__trackwrap {
   position: absolute;
-  top: -10%;
-  right: -6%;
-  height: 120%;
-  width: auto;
-  aspect-ratio: 1 / 1;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
 }
+
+/* Pinned to the right edge of the centred content column, not the
+   full-width hero: as a percentage of the hero it slid off-screen on wide
+   windows. Inset on every side plus "meet" keeps the whole track in view. */
+.hero__track {
+  position: absolute;
+  top: 26px;
+  bottom: 26px;
+  right: max(var(--pad), calc((100% - var(--content-max)) / 2 + var(--pad)));
+  width: min(44%, 460px);
+}
+.hero__track svg { width: 100%; height: 100%; display: block; overflow: visible; }
+/* Widths are in the track's own 100-unit space (~2.8px each at desktop
+   size), not px: non-scaling-stroke would be simpler, but Chrome then
+   measures the dash in screen pixels and ignores pathLength, which turns
+   the one full-length dash below into dash-gap-dash. */
+.hero__track path {
+  stroke-dasharray: 1;
+  animation: trace 1.6s var(--ease) both;
+}
+.hero__track-glow { stroke-width: 3.6; opacity: 0.25; filter: blur(7px); }
+.hero__track-line { stroke-width: 0.9; opacity: 0.85; }
+@keyframes trace { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @media (max-width: 767px) {
-  .hero__art svg { right: -18%; top: -6%; height: 112%; }
+  .hero__track { width: 58%; top: 18px; bottom: auto; height: 62%; opacity: 0.4; }
 }
 
 .hero__scrim {
@@ -238,7 +348,7 @@ a { color: inherit; text-decoration: none; }
 
 .hero__body {
   width: 100%;
-  max-width: 1080px;
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: 0 var(--pad) clamp(20px, 4vw, 34px);
 }
@@ -481,22 +591,145 @@ a { color: inherit; text-decoration: none; }
   text-align: left;
 }
 
-.select {
-  appearance: none;
+/* Custom listbox (see the race dropdown in app.js): trigger styled as a
+   chip-row control, panel as an elevated card like the rest of the UI. */
+.dropdown {
+  position: relative;
   width: 100%;
-  max-width: 440px;
+  max-width: 480px;
+}
+
+.dropdown__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px 11px 15px;
   background: var(--surface);
   border: 1px solid var(--line);
+  border-radius: 999px;
   color: var(--text);
-  border-radius: var(--radius-sm);
-  padding: 12px 40px 12px 14px;
-  font-size: 15px;
+  font-size: 14.5px;
+  font-weight: 550;
+  text-align: left;
   cursor: pointer;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 18px;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
 }
+.dropdown__trigger:hover { border-color: var(--line-strong); }
+.dropdown__trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dropdown.is-open .dropdown__trigger { border-color: var(--line-strong); background: var(--surface-hi); }
+
+.dropdown__value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.dropdown__value-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown__chevron {
+  flex: none;
+  color: var(--text-dim);
+  transition: transform 0.25s var(--ease);
+}
+.dropdown.is-open .dropdown__chevron { transform: rotate(180deg); }
+
+.dropdown__flag {
+  width: 20px;
+  height: 14px;
+  border-radius: 2px;
+  object-fit: cover;
+  flex: none;
+  display: block;
+}
+
+.dropdown__panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  max-height: 380px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  background: rgba(24, 24, 28, 0.97);
+  backdrop-filter: saturate(160%) blur(18px);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  animation: drop 0.18s var(--ease);
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-hi) transparent;
+}
+.dropdown__panel[hidden] { display: none; }
+@keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
+
+.dropdown__group {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  margin: 0 -6px;
+  padding: 9px 16px 7px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: rgba(24, 24, 28, 0.97);
+}
+
+.dropdown__option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.dropdown__option.is-active { background: var(--surface-hi); color: var(--text); }
+.dropdown__option[aria-selected="true"] { color: var(--text); }
+.dropdown__option[aria-selected="true"]::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(255, 45, 85, 0.6);
+  flex: none;
+}
+
+.dropdown__round {
+  flex: none;
+  min-width: 34px;
+  padding: 2px 0;
+  text-align: center;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.dropdown__option[aria-selected="true"] .dropdown__round { background: var(--accent); color: #fff; }
+
+.dropdown__text { min-width: 0; display: flex; flex-direction: column; }
+.dropdown__name {
+  font-size: 14px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dropdown__sub { font-size: 11.5px; color: var(--text-faint); }
 
 /* ------------------------------------------------------------- scoreline */
 
@@ -539,6 +772,16 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   gap: 10px;
   margin: 22px 0 8px;
+}
+/* Side by side once each card can still be ~600px: two per row on a
+   wide window, three on a very wide one, read left to right in rank
+   order. align-items: start so a closed card isn't stretched to the
+   height of an open neighbour. */
+@media (min-width: 1280px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 600px), 1fr));
+    align-items: start;
+  }
 }
 
 .card {
@@ -751,7 +994,7 @@ a { color: inherit; text-decoration: none; }
    than left as an empty gap -- see driverCard's --nophoto toggle. */
 .detailgrid {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: clamp(150px, 30%, 200px) minmax(0, 1fr);
   gap: 14px;
   padding: 14px 15px 16px;
   border-top: 1px solid var(--line);
@@ -1099,7 +1342,12 @@ a { color: inherit; text-decoration: none; }
   margin: 20px 0 6px;
 }
 @media (min-width: 560px)  { .statcards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (min-width: 1040px) { .statcards { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
+/* One row of eight only when the column itself is wide enough. Keyed to
+   the column, not the window: the column narrows on laptop widths to make
+   room for the Predictions side rails, and a window breakpoint kept eight
+   cards in a row there and cut their labels off. */
+#tab-analytics > .wrap { container-type: inline-size; }
+@container (min-width: 1100px) { .statcards { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
 
 .statcard {
   background: var(--bg-elevated);
