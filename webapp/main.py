@@ -288,6 +288,17 @@ def _stop_scheduler():
     auto_update.stop()
 
 
+@app.middleware("http")
+async def _revalidate_frontend(request, call_next):
+    """Make the browser check before reusing a cached page file. Without
+    this, Chrome kept serving an old app.js/styles.css against a new
+    index.html after an update, and the mismatch broke the page."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/")
 def index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
