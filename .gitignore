@@ -5,3 +5,5 @@ tempCodeRunner*
 .claude/
 .env
 .DS_Store
+data/cache/
+*.meta.json
