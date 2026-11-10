@@ -70,6 +70,12 @@ Main endpoints: `/api/status`, `/api/circuits`, `/api/races`, `/api/schedule`, `
 
 Optional environment variables: `F1_DATA_DIR`, `F1_MODEL_PATH`, `F1_CHECK_INTERVAL_SECONDS`, `F1_NEWS_TTL_SECONDS`, `F1_AGENT_MODEL`.
 
+## Architecture
+
+![Apex system architecture](docs/architecture.svg)
+
+The red path is the self-update loop: the scheduler checks for a new race, saves the results, retrains the model in a separate process and swaps it in without restarting the server.
+
 ## Project structure
 
 ```

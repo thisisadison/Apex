@@ -1,0 +1,151 @@
+# Apex architecture. Render with:  d2 docs/architecture.d2 docs/architecture.svg
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+    theme-id: 0
+    dark-theme-id: 200
+    pad: 30
+  }
+}
+
+direction: down
+
+classes: {
+  group: {
+    style: {
+      font-size: 28
+      bold: true
+      border-radius: 14
+    }
+  }
+  box: {
+    shape: rectangle
+    style.border-radius: 8
+  }
+  store: {
+    shape: cylinder
+  }
+  external: {
+    shape: rectangle
+    style: {
+      border-radius: 8
+      stroke-dash: 3
+    }
+  }
+  loop: {
+    style: {
+      stroke: "#ff2d55"
+      stroke-width: 2
+      font-color: "#ff2d55"
+      font-size: 15
+      bold: true
+    }
+  }
+}
+
+jolpica: |md
+  ### Jolpica-F1 API
+  `api.jolpi.ca` · results, calendar, grid
+| {class: external}
+
+rss: |md
+  ### RSS feeds
+  Formula 1 · Motorsport.com · BBC Sport
+| {class: external}
+
+anthropic: |md
+  ### Anthropic API
+  Claude · optional, needs a key
+| {class: external}
+
+training: Training {
+  class: group
+
+  data: |md
+    ### Race data
+    `data/` · CSVs, 2008 to today
+  | {class: store}
+
+  pipeline: |md
+    ### Training pipeline
+    `f1/pipeline.py`\
+    features · 4 models · GridSearchCV
+  | {class: box}
+
+  model: |md
+    ### Trained model
+    `models/model.pkl`
+  | {class: store}
+
+  data -> pipeline -> model
+}
+
+server: "FastAPI server" {
+  class: group
+
+  scheduler: |md
+    ### AutoUpdateScheduler
+    `webapp/scheduler.py`\
+    checks every 3 h
+  | {class: box}
+
+  live: |md
+    ### LiveData
+    `webapp/live_data.py`\
+    **`/api/schedule`**
+  | {class: box}
+
+  store: |md
+    ### ModelStore
+    `webapp/model_store.py`\
+    hot-reloads the model
+  | {class: box}
+
+  service: |md
+    ### PredictionService
+    `webapp/predictions.py`\
+    **`/api/predictions/*`**
+  | {class: box}
+
+  analytics: |md
+    ### Season analytics
+    `f1/analytics.py`\
+    **`/api/analytics`**
+  | {class: box}
+
+  agent: |md
+    ### RaceAnalyst
+    `webapp/agent.py` · 5 read-only tools\
+    **`/api/chat`**
+  | {class: box}
+
+  news: |md
+    ### News
+    `webapp/news.py` · cached daily\
+    **`/api/news`**
+  | {class: box}
+
+  store -> service
+  service -> analytics
+  service -> agent
+}
+
+browser: |md
+  ### Browser
+  `webapp/static/` · plain HTML, CSS and JS, no framework
+| {class: box}
+
+server -> browser: JSON over HTTP
+
+training.model -> server.store
+training.data -> server.service
+jolpica -> server.live
+rss -> server.news
+server.agent <-> anthropic
+
+# The self-update loop
+server.scheduler -> server.live: "1 · new race?" {class: loop}
+server.live -> training.data: "2 · append results" {class: loop}
+server.scheduler -> training.pipeline: "3 · retrain in a subprocess" {class: loop; style.stroke-dash: 4}
+server.scheduler -> server.store: "4 · swap in, no restart" {class: loop; style.stroke-dash: 4}
