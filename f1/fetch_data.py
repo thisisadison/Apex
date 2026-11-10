@@ -96,7 +96,6 @@ def fetch_standings_before(year: int, round_: str) -> tuple:
 
 _debut_year_cache = {}
 
-
 def fetch_debut_year(driver_id: str) -> int:
     """A driver's first F1 season, across their whole career (not just
     Singapore) -- cached since the same driver reappears across years."""
